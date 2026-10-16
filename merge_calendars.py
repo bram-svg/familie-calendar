@@ -1,1 +1,378 @@
+import os
+import sys
+import hashlib
+from pathlib import Path
 
+import requests
+from icalendar import Calendar, Event
+
+
+OUTPUT_FILE = Path("familie-agenda.ics")
+
+REQUEST_TIMEOUT = 45
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; FamilieCalendarMerger/1.0; "
+        "+https://github.com/bram-svg)"
+    )
+}
+
+
+# ============================================================
+# Prefixes
+# ============================================================
+
+PERSON_PREFIXES = {
+    "niels": "🔴 N - ",
+    "fleur": "🌸 F - ",
+    "guus": "🔵 G - ",
+    "luuk": "🟢 L - ",
+    "charlotte": "🟣 C - ",
+    "bram": "🫒 B - ",
+}
+
+
+# ============================================================
+# Bronnen
+#
+# Gevoelige/private URLs worden uit GitHub Secrets opgehaald.
+# Openbare hockey- en Meerlanden-bestanden kunnen rechtstreeks
+# in het script staan.
+# ============================================================
+
+SOURCES = [
+    {
+        "name": "Klender familieagenda",
+        "url": os.environ.get("KLENDER_ICS_URL", ""),
+        "mode": "attendee",
+        "prefix": None,
+    },
+    {
+        "name": "Google-agenda Bram",
+        "url": os.environ.get("GOOGLE_ICS_URL", ""),
+        "mode": "fixed",
+        "prefix": "🫒 B - ",
+    },
+    {
+        "name": "Hockey Charlotte",
+        "url": "https://bram-svg.github.io/hockey-calendar/team-C.ics",
+        "mode": "fixed",
+        "prefix": "🟣 C - ",
+    },
+    {
+        "name": "Hockey Fleur",
+        "url": "https://bram-svg.github.io/hockey-calendar/team-F.ics",
+        "mode": "fixed",
+        "prefix": "🌸 F - ",
+    },
+    {
+        "name": "Hockey Guus",
+        "url": "https://bram-svg.github.io/hockey-calendar/team-G.ics",
+        "mode": "fixed",
+        "prefix": "🔵 G - ",
+    },
+    {
+        "name": "Hockey Luuk",
+        "url": "https://bram-svg.github.io/hockey-calendar/team-L.ics",
+        "mode": "fixed",
+        "prefix": "🟢 L - ",
+    },
+    {
+        "name": "Hockey Niels",
+        "url": "https://bram-svg.github.io/hockey-calendar/team-N.ics",
+        "mode": "fixed",
+        "prefix": "🔴 N - ",
+    },
+    {
+        "name": "Meerlanden afvalkalender",
+        "url": "https://bram-svg.github.io/meerlanden-calendar/meerlanden.ics",
+        "mode": "none",
+        "prefix": None,
+    },
+    {
+        "name": "Parro schoolagenda",
+        "url": os.environ.get("PARRO_ICS_URL", ""),
+        "mode": "none",
+        "prefix": None,
+    },
+]
+
+
+def validate_sources():
+    """Controleer of alle benodigde URL's aanwezig zijn."""
+
+    missing = []
+
+    for source in SOURCES:
+        if not source["url"]:
+            missing.append(source["name"])
+
+    if missing:
+        print("De volgende agenda-URL's ontbreken:")
+        for name in missing:
+            print(f"  - {name}")
+
+        print("\nControleer de GitHub Secrets:")
+        print("  - KLENDER_ICS_URL")
+        print("  - GOOGLE_ICS_URL")
+        print("  - PARRO_ICS_URL")
+
+        sys.exit(1)
+
+
+def download_calendar(source):
+    """Download en parse één ICS-bestand."""
+
+    name = source["name"]
+    url = source["url"]
+
+    print(f"Downloaden: {name}")
+
+    try:
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT,
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise RuntimeError(
+            f"Downloaden van '{name}' is mislukt: {error}"
+        ) from error
+
+    content = response.content
+
+    if not content or b"BEGIN:VCALENDAR" not in content.upper():
+        raise RuntimeError(
+            f"De bron '{name}' bevat geen geldig VCALENDAR-bestand."
+        )
+
+    try:
+        calendar = Calendar.from_ical(content)
+    except Exception as error:
+        raise RuntimeError(
+            f"Het ICS-bestand van '{name}' kon niet worden gelezen: {error}"
+        ) from error
+
+    return calendar
+
+
+def get_attendee_text(event):
+    """
+    Verzamel tekst uit ATTENDEE en eventueel ATTENDEES.
+
+    Hierbij worden zowel het adres als parameters zoals CN meegenomen.
+    Bijvoorbeeld:
+        ATTENDEE;CN=Niels:mailto:...
+    """
+
+    values = []
+
+    for property_name in ("ATTENDEE", "ATTENDEES"):
+        attendee_properties = event.get(property_name)
+
+        if attendee_properties is None:
+            continue
+
+        if not isinstance(attendee_properties, list):
+            attendee_properties = [attendee_properties]
+
+        for attendee in attendee_properties:
+            values.append(str(attendee))
+
+            params = getattr(attendee, "params", {})
+
+            for key, value in params.items():
+                values.append(str(key))
+                values.append(str(value))
+
+    return " ".join(values).lower()
+
+
+def determine_attendee_prefix(event):
+    """
+    Bepaal de prefix op basis van de namen in het ATTENDEE(S)-veld.
+
+    Als meerdere gezinsleden bij dezelfde afspraak staan, worden
+    meerdere codes toegevoegd.
+    """
+
+    attendee_text = get_attendee_text(event)
+    prefixes = []
+
+    for person_name, prefix in PERSON_PREFIXES.items():
+        if person_name in attendee_text:
+            prefixes.append(prefix.strip())
+
+    if not prefixes:
+        return ""
+
+    return " ".join(prefixes) + " "
+
+
+def get_summary(event):
+    """Lees het bestaande onderwerp uit."""
+
+    summary = event.get("SUMMARY")
+
+    if summary is None:
+        return "(geen onderwerp)"
+
+    return str(summary)
+
+
+def already_has_prefix(summary):
+    """
+    Voorkom dat een prefix bij iedere uitvoering opnieuw wordt toegevoegd.
+    """
+
+    known_prefixes = [
+        "🔴 N - ",
+        "🌸 F - ",
+        "🔵 G - ",
+        "🟢 L - ",
+        "🟣 C - ",
+        "🫒 B - ",
+    ]
+
+    return any(summary.startswith(prefix) for prefix in known_prefixes)
+
+
+def update_event_summary(event, source):
+    """Pas het onderwerp aan volgens de configuratie van de bron."""
+
+    mode = source["mode"]
+
+    if mode == "none":
+        return
+
+    original_summary = get_summary(event)
+
+    if already_has_prefix(original_summary):
+        return
+
+    if mode == "fixed":
+        prefix = source["prefix"]
+
+    elif mode == "attendee":
+        prefix = determine_attendee_prefix(event)
+
+    else:
+        raise ValueError(
+            f"Onbekende verwerkingsmodus voor '{source['name']}': {mode}"
+        )
+
+    if prefix:
+        event["SUMMARY"] = prefix + original_summary
+
+
+def component_signature(component):
+    """
+    Maak een sleutel waarmee exact dubbele onderdelen worden voorkomen.
+
+    Voor afspraken worden UID en RECURRENCE-ID gebruikt. Voor onderdelen
+    zonder UID wordt een hash van de volledige component gemaakt.
+    """
+
+    component_name = getattr(component, "name", "").upper()
+
+    if component_name == "VEVENT":
+        uid = str(component.get("UID", "")).strip()
+        recurrence_id = str(component.get("RECURRENCE-ID", "")).strip()
+
+        if uid:
+            return f"VEVENT|{uid}|{recurrence_id}"
+
+    raw_component = component.to_ical()
+    digest = hashlib.sha256(raw_component).hexdigest()
+
+    return f"{component_name}|{digest}"
+
+
+def build_output_calendar():
+    """Download, verwerk en combineer alle agenda's."""
+
+    validate_sources()
+
+    output_calendar = Calendar()
+
+    output_calendar.add("PRODID", "-//Familie van der Heijden//Gecombineerde kalender//NL")
+    output_calendar.add("VERSION", "2.0")
+    output_calendar.add("CALSCALE", "GREGORIAN")
+    output_calendar.add("X-WR-CALNAME", "Familie Van der Heijden")
+    output_calendar.add("X-WR-CALDESC", "Gecombineerde familieagenda")
+    output_calendar.add("X-PUBLISHED-TTL", "PT2H")
+    output_calendar.add("REFRESH-INTERVAL", "PT2H")
+
+    added_components = set()
+    total_events = 0
+
+    for source in SOURCES:
+        calendar = download_calendar(source)
+
+        source_events = 0
+
+        for component in calendar.subcomponents:
+            component_name = getattr(component, "name", "").upper()
+
+            # Alleen relevante kalendercomponenten overnemen.
+            if component_name not in {
+                "VEVENT",
+                "VTODO",
+                "VJOURNAL",
+                "VTIMEZONE",
+            }:
+                continue
+
+            if component_name == "VEVENT":
+                update_event_summary(component, source)
+
+            signature = component_signature(component)
+
+            if signature in added_components:
+                print(
+                    f"  Dubbel onderdeel overgeslagen in "
+                    f"'{source['name']}': {signature}"
+                )
+                continue
+
+            added_components.add(signature)
+            output_calendar.add_component(component)
+
+            if component_name == "VEVENT":
+                source_events += 1
+                total_events += 1
+
+        print(f"  Toegevoegd: {source_events} afspraken")
+
+    if total_events == 0:
+        raise RuntimeError(
+            "Er zijn geen afspraken gevonden. "
+            "Het bestaande uitvoerbestand wordt daarom niet vervangen."
+        )
+
+    temporary_file = OUTPUT_FILE.with_suffix(".ics.tmp")
+
+    with temporary_file.open("wb") as file:
+        file.write(output_calendar.to_ical())
+
+    temporary_file.replace(OUTPUT_FILE)
+
+    print()
+    print(f"Gereed: {OUTPUT_FILE}")
+    print(f"Totaal aantal afspraken: {total_events}")
+
+
+def main():
+    try:
+        build_output_calendar()
+    except Exception as error:
+        print()
+        print(f"FOUT: {error}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
