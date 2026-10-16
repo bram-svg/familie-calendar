@@ -1,1 +1,61 @@
+name: Update gecombineerde familieagenda
 
+on:
+  schedule:
+    # Iedere twee uur, op 17 minuten na het hele uur.
+    # GitHub Actions gebruikt hiervoor UTC.
+    - cron: "17 */2 * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-familie-calendar
+  cancel-in-progress: false
+
+jobs:
+  update-calendar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Benodigde Python-pakketten installeren
+        run: pip install -r requirements.txt
+
+      - name: Agenda's downloaden en samenvoegen
+        env:
+          KLENDER_ICS_URL: ${{ secrets.KLENDER_ICS_URL }}
+          GOOGLE_ICS_URL: ${{ secrets.GOOGLE_ICS_URL }}
+          PARRO_ICS_URL: ${{ secrets.PARRO_ICS_URL }}
+        run: python merge_calendars.py
+
+      - name: Controleren of het ICS-bestand is aangemaakt
+        run: |
+          test -f familie-agenda.ics
+          grep -q "BEGIN:VCALENDAR" familie-agenda.ics
+          grep -q "END:VCALENDAR" familie-agenda.ics
+          echo "ICS-bestand is succesvol gecontroleerd."
+
+      - name: Gewijzigd bestand opslaan
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add familie-agenda.ics
+
+          if git diff --cached --quiet; then
+            echo "Geen wijzigingen in de kalender."
+          else
+            git commit -m "Automatische update familieagenda"
+            git push
+          fi
