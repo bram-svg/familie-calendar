@@ -25,11 +25,11 @@ HEADERS = {
 
 PERSON_PREFIXES = {
     "niels": "🔴 N - ",
-    "fleur": "🌸 F - ",
+    "fleur": "🟣 F - ",
     "guus": "🔵 G - ",
     "luuk": "🟢 L - ",
-    "charlotte": "🟣 C - ",
-    "bram": "🫒 B - ",
+    "charlotte": "🟠 C - ",
+    "bram": "🟡 B - ",
 }
 
 
@@ -52,19 +52,19 @@ SOURCES = [
         "name": "Google-agenda Bram",
         "url": os.environ.get("GOOGLE_ICS_URL", ""),
         "mode": "fixed",
-        "prefix": "🫒 B - ",
+        "prefix": "🟡 B - ",
     },
     {
         "name": "Hockey Charlotte",
         "url": "https://bram-svg.github.io/hockey-calendar/team-C.ics",
         "mode": "fixed",
-        "prefix": "🟣 C - ",
+        "prefix": "🟠 C - ",
     },
     {
         "name": "Hockey Fleur",
         "url": "https://bram-svg.github.io/hockey-calendar/team-F.ics",
         "mode": "fixed",
-        "prefix": "🌸 F - ",
+        "prefix": "🟣 F - ",
     },
     {
         "name": "Hockey Guus",
@@ -230,11 +230,11 @@ def already_has_prefix(summary):
 
     known_prefixes = [
         "🔴 N - ",
-        "🌸 F - ",
+        "🟣 F - ",
         "🔵 G - ",
         "🟢 L - ",
-        "🟣 C - ",
-        "🫒 B - ",
+        "🟠 C - ",
+        "🟡 B - ",
     ]
 
     return any(summary.startswith(prefix) for prefix in known_prefixes)
