@@ -303,8 +303,6 @@ def build_output_calendar():
     output_calendar.add("CALSCALE", "GREGORIAN")
     output_calendar.add("X-WR-CALNAME", "Familie Van der Heijden")
     output_calendar.add("X-WR-CALDESC", "Gecombineerde familieagenda")
-    output_calendar.add("X-PUBLISHED-TTL", "PT2H")
-    output_calendar.add("REFRESH-INTERVAL", "PT2H")
 
     added_components = set()
     total_events = 0
