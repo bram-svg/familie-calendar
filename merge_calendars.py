@@ -90,12 +90,6 @@ SOURCES = [
         "mode": "none",
         "prefix": None,
     },
-    {
-        "name": "Parro schoolagenda",
-        "url": os.environ.get("PARRO_ICS_URL", ""),
-        "mode": "none",
-        "prefix": None,
-    },
 ]
 
 
@@ -116,7 +110,6 @@ def validate_sources():
         print("\nControleer de GitHub Secrets:")
         print("  - KLENDER_ICS_URL")
         print("  - GOOGLE_ICS_URL")
-        print("  - PARRO_ICS_URL")
 
         sys.exit(1)
 
