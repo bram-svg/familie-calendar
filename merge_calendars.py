@@ -268,17 +268,14 @@ def has_party_icon(summary):
 
 
 def has_medical_icon(summary):
-    """Controleer of een medisch icoon of relevante woorden al in het onderwerp staan."""
+    """Controleer of er al een medisch/tandarts-icoon in het onderwerp staat."""
 
     if not summary:
         return False
 
-    lower = summary.lower()
-    if "🩺" in summary or "🦷" in summary:
-        return True
-    if any(w in lower for w in ("tandarts", "tandartsafspraak", "tandarts-", "dokter", "huisarts", "orthodont", "ortho")):
-        return True
-    return False
+    # Controleer alleen op de daadwerkelijke emoji's, niet op keywords —
+    # keywords worden gebruikt om te bepalen of we het icoon moeten toevoegen.
+    return "🩺" in summary or "🦷" in summary
 
 
 def has_hockey_icon(summary):
