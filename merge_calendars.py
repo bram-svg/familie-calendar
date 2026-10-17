@@ -103,12 +103,6 @@ SOURCES = [
         "mode": "none",
         "prefix": None,
     },
-    {
-        "name": "Parro schoolagenda",
-        "url": os.environ.get("PARRO_ICS_URL", ""),
-        "mode": "none",
-        "prefix": None,
-    },
 ]
 
 
@@ -129,7 +123,6 @@ def validate_sources():
         print("\nControleer de GitHub Secrets:")
         print("  - KLENDER_ICS_URL")
         print("  - GOOGLE_ICS_URL")
-        print("  - PARRO_ICS_URL")
 
         sys.exit(1)
 
@@ -460,95 +453,4 @@ def component_signature(component):
         uid = str(component.get("UID", "")).strip()
         recurrence_id = str(component.get("RECURRENCE-ID", "")).strip()
 
-        if uid:
-            return f"VEVENT|{uid}|{recurrence_id}"
-
-    raw_component = component.to_ical()
-    digest = hashlib.sha256(raw_component).hexdigest()
-
-    return f"{component_name}|{digest}"
-
-
-def build_output_calendar():
-    """Download, verwerk en combineer alle agenda's."""
-
-    validate_sources()
-
-    output_calendar = Calendar()
-
-    output_calendar.add("PRODID", "-//Familie van der Heijden//Gecombineerde kalender//NL")
-    output_calendar.add("VERSION", "2.0")
-    output_calendar.add("CALSCALE", "GREGORIAN")
-    output_calendar.add("X-WR-CALNAME", "Familie Van der Heijden")
-    output_calendar.add("X-WR-CALDESC", "Gecombineerde familieagenda")
-
-    added_components = set()
-    total_events = 0
-
-    for source in SOURCES:
-        calendar = download_calendar(source)
-
-        source_events = 0
-
-        for component in calendar.subcomponents:
-            component_name = getattr(component, "name", "").upper()
-
-            # Alleen relevante kalendercomponenten overnemen.
-            if component_name not in {
-                "VEVENT",
-                "VTODO",
-                "VJOURNAL",
-                "VTIMEZONE",
-            }:
-                continue
-
-            if component_name == "VEVENT":
-                update_event_summary(component, source)
-
-            signature = component_signature(component)
-
-            if signature in added_components:
-                print(
-                    f"  Dubbel onderdeel overgeslagen in "
-                    f"'{source['name']}': {signature}"
-                )
-                continue
-
-            added_components.add(signature)
-            output_calendar.add_component(component)
-
-            if component_name == "VEVENT":
-                source_events += 1
-                total_events += 1
-
-        print(f"  Toegevoegd: {source_events} afspraken")
-
-    if total_events == 0:
-        raise RuntimeError(
-            "Er zijn geen afspraken gevonden. "
-            "Het bestaande uitvoerbestand wordt daarom niet vervangen."
-        )
-
-    temporary_file = OUTPUT_FILE.with_suffix(".ics.tmp")
-
-    with temporary_file.open("wb") as file:
-        file.write(output_calendar.to_ical())
-
-    temporary_file.replace(OUTPUT_FILE)
-
-    print()
-    print(f"Gereed: {OUTPUT_FILE}")
-    print(f"Totaal aantal afspraken: {total_events}")
-
-
-def main():
-    try:
-        build_output_calendar()
-    except Exception as error:
-        print()
-        print(f"FOUT: {error}", file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    ... truncated ...
