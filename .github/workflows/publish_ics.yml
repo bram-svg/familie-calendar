@@ -1,0 +1,81 @@
+name: Publish ICS to GitHub Pages
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests icalendar
+
+      - name: Run merge_calendars.py
+        env:
+          KLENDER_ICS_URL: ${{ secrets.KLENDER_ICS_URL }}
+          GOOGLE_ICS_URL: ${{ secrets.GOOGLE_ICS_URL }}
+          # If you use other secrets, add them here
+        run: |
+          python merge_calendars.py
+
+      - name: Publish generated ICS to gh-pages with token filename
+        env:
+          ICS_TOKEN: ${{ secrets.ICS_PUBLIC_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$ICS_TOKEN" ]; then echo "ERROR: ICS_PUBLIC_TOKEN secret not set"; exit 1; fi
+          OUTPUT_FILE="familie-agenda.ics"
+          if [ ! -f "$OUTPUT_FILE" ]; then echo "ERROR: $OUTPUT_FILE not found"; ls -la; exit 1; fi
+
+          # Prepare gh-pages branch (or replace contents)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create or reset gh-pages branch
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages
+            git switch gh-pages
+            git rm -rf . || true
+          else
+            git switch --orphan gh-pages
+            git rm -rf . || true
+          fi
+
+          # Copy the generated ICS with a token in the filename
+          FNAME="familie-agenda-${ICS_TOKEN}.ics"
+          cp "$OUTPUT_FILE" "$FNAME"
+
+          # Optionally create an index.html with link
+          cat > index.html <<EOF
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Familie agenda</title>
+          <p>Publieke kalender (onveilige, token-based toegang). Gebruik de link hieronder in je kalenderclient:</p>
+          <p><a href="/$FNAME">Download ICS (token URL)</a></p>
+          EOF
+
+          git add "$FNAME" index.html
+          git commit -m "Publish ICS $FNAME [ci skip]" || true
+          git push origin gh-pages --force
+
+      - name: Output public URL
+        run: |
+          echo "Published to: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/familie-agenda-${{ secrets.ICS_PUBLIC_TOKEN }}.ics"
