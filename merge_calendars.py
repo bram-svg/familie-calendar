@@ -282,14 +282,13 @@ def has_medical_icon(summary):
 
 
 def has_hockey_icon(summary):
-    """Controleer of het hockey-icoon of het woord 'hockey' al in het onderwerp staat."""
+    """Controleer of het hockey-icoon al in het onderwerp staat."""
 
     if not summary:
         return False
 
-    lower = summary.lower()
-    # kijk op whole words of specifieke phrases
-    return "🏑" in summary or bool(re.search(r"\b(hockey|hockey training|training hockey)\b", lower))
+    # Alleen controleren op het emoji-teken — niet op het woord 'hockey'.
+    return "🏑" in summary
 
 
 def has_ski_icon(summary):
@@ -303,13 +302,13 @@ def has_ski_icon(summary):
 
 
 def has_plane_icon(summary):
-    """Controleer of het vliegtuig-icoon of het woord 'vlucht' al in het onderwerp staat."""
+    """Controleer of het vliegtuig-icoon al in het onderwerp staat."""
 
     if not summary:
         return False
 
-    lower = summary.lower()
-    return "✈️" in summary or bool(re.search(r"\b(vlucht|vluchten)\b", lower))
+    # Sommige bronnen gebruiken de ✈ zonder variation selector, dus check op beide vormen
+    return "✈️" in summary or "✈" in summary
 
 
 def is_yearly_recurring(event):
