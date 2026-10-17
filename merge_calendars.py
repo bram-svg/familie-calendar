@@ -368,7 +368,7 @@ def update_event_summary(event, source):
 
     # Bepaal medische iconen
     add_dentist = ("tand" in lower_summary or "tandarts" in lower_summary) and not has_medical_icon(original_summary)
-    add_doctor = ("dokter" in lower_summary or "huisarts" in lower_summary) and not has_medical_icon(original_summary)
+    add_doctor = ("dokter" in lower_summary or "huisarts" in lower_summary or "arts" in lower_summary) and not has_medical_icon(original_summary)
     add_ortho = ("orthodont" in lower_summary or "ortho" in lower_summary) and not has_medical_icon(original_summary)
 
     medical_prefix = ""
