@@ -36,6 +36,12 @@ PERSON_PREFIXES = {
 BIRTHDAY_ICON = "🎂 "
 # Icoon voor feest/feestelijke onderwerpen (voeg dit als prefix vóór het onderwerp)
 PARTY_ICON = "🎉 "
+# Medische / afspraak iconen
+DENTIST_ICON = "🦷 "
+DOCTOR_ICON = "🩺 "
+ORTHO_ICON = "🦷 "
+# Hockey icoon
+HOCKEY_ICON = "🏑 "
 
 
 # ============================================================
@@ -263,6 +269,29 @@ def has_party_icon(summary):
     return "🎉" in summary or "feest" in summary.lower()
 
 
+def has_medical_icon(summary):
+    """Controleer of een medisch icoon of relevante woorden al in het onderwerp staan."""
+
+    if not summary:
+        return False
+
+    lower = summary.lower()
+    if "🩺" in summary or "🦷" in summary:
+        return True
+    if any(w in lower for w in ("tandarts", "tandarts", "tandartsafspraak", "tandarts-", "dokter", "huisarts", "orthodont", "ortho")):
+        return True
+    return False
+
+
+def has_hockey_icon(summary):
+    """Controleer of het hockey-icoon of het woord 'hockey' al in het onderwerp staat."""
+
+    if not summary:
+        return False
+
+    return "🏑" in summary or "hockey" in summary.lower()
+
+
 def is_yearly_recurring(event):
     """Detecteer of een VEVENT jaarlijks terugkeert (FREQ=YEARLY in RRULE)."""
 
@@ -301,6 +330,10 @@ def update_event_summary(event, source):
     wordt het verjaardagsicoon vóór het onderwerp gezet (voor de
     persoons-prefix). Als in het onderwerp 'verjaardag' of 'feest'
     voorkomt, wordt er een feest-icoon vóór het onderwerp geplaatst.
+    Voor medische onderwerpen (tandarts/dokter/ortho) wordt het bijpassende
+    medisch icoon vóór het onderwerp geplaatst.
+    Voor hockey-afspraken (hockey-bron of 'hockey' in onderwerp) wordt het
+    hockey-icoon vóór het onderwerp geplaatst.
     """
 
     mode = source["mode"]
@@ -309,6 +342,29 @@ def update_event_summary(event, source):
         return
 
     original_summary = get_summary(event)
+    lower_summary = original_summary.lower()
+    source_name = (source.get("name") or "").lower()
+    source_url = (source.get("url") or "").lower()
+
+    # Bepaal medische iconen
+    add_dentist = ("tand" in lower_summary or "tandarts" in lower_summary) and not has_medical_icon(original_summary)
+    add_doctor = ("dokter" in lower_summary or "huisarts" in lower_summary) and not has_medical_icon(original_summary)
+    add_ortho = ("orthodont" in lower_summary or "ortho" in lower_summary) and not has_medical_icon(original_summary)
+
+    medical_prefix = ""
+    if add_doctor:
+        medical_prefix = DOCTOR_ICON
+    elif add_ortho:
+        medical_prefix = ORTHO_ICON
+    elif add_dentist:
+        medical_prefix = DENTIST_ICON
+
+    # Hockey-prefix voor hockey-bronnen en voor Klender-afspraken met 'hockey' in het onderwerp
+    add_hockey = (
+        ("hockey" in source_name or "hockey" in source_url)
+        or "hockey" in lower_summary
+    ) and not has_hockey_icon(original_summary)
+    hockey_prefix = HOCKEY_ICON if add_hockey else ""
 
     # Bepaal of we een verjaardagsicoon moeten toevoegen
     add_birthday = (
@@ -319,7 +375,7 @@ def update_event_summary(event, source):
 
     # Bepaal of we een feesticoon moeten toevoegen (als 'verjaardag' of 'feest' in onderwerp)
     add_party = (
-        ("verjaardag" in original_summary.lower() or "feest" in original_summary.lower())
+        ("verjaardag" in lower_summary or "feest" in lower_summary)
         and not has_party_icon(original_summary)
     )
 
@@ -336,11 +392,15 @@ def update_event_summary(event, source):
             )
 
     # Bouw het onderwerp: volgorde van iconen/prefixes is:
-    # PARTY_ICON (indien van toepassing) + BIRTHDAY_ICON (indien van toepassing) + prefix + originele onderwerp
+    # MEDICAL_ICON + HOCKEY_ICON + PARTY_ICON + BIRTHDAY_ICON + prefix + originele onderwerp
     new_summary = original_summary
 
     if already_has_prefix(original_summary):
-        # Als er al een prefix is, we voegen iconen vóór het bestaande onderwerp
+        # Als er al een prefix is, voeg iconen vóór het bestaande onderwerp
+        if medical_prefix:
+            new_summary = f"{medical_prefix}{new_summary}"
+        if hockey_prefix:
+            new_summary = f"{hockey_prefix}{new_summary}"
         if add_birthday:
             new_summary = f"{BIRTHDAY_ICON}{new_summary}"
         if add_party:
@@ -349,7 +409,11 @@ def update_event_summary(event, source):
         # Voeg prefix (indien aanwezig) vóór onderwerp
         if prefix_to_add:
             new_summary = f"{prefix_to_add}{new_summary}"
-        # Voeg iconen vóór alles
+        # Voeg iconen vóór alles (medisch en hockey eerst)
+        if medical_prefix:
+            new_summary = f"{medical_prefix}{new_summary}"
+        if hockey_prefix:
+            new_summary = f"{hockey_prefix}{new_summary}"
         if add_birthday:
             new_summary = f"{BIRTHDAY_ICON}{new_summary}"
         if add_party:
