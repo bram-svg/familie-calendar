@@ -34,6 +34,8 @@ PERSON_PREFIXES = {
 
 # Icoon voor verjaardagen (voeg dit vóór het onderwerp)
 BIRTHDAY_ICON = "🎂 "
+# Icoon voor feest/feestelijke onderwerpen (voeg dit als prefix vóór het onderwerp)
+PARTY_ICON = "🎉 "
 
 
 # ============================================================
@@ -244,12 +246,21 @@ def already_has_prefix(summary):
 
 
 def has_birthday_icon(summary):
-    """Controleer of het verjaardagsicoon al in het onderwerp staat."""
+    """Controleer of het verjaardagsicoon of het woord 'verjaardag' al in het onderwerp staat."""
 
     if not summary:
         return False
 
     return "🎂" in summary or "verjaardag" in summary.lower()
+
+
+def has_party_icon(summary):
+    """Controleer of het feesticoon of het woord 'feest' al in het onderwerp staat."""
+
+    if not summary:
+        return False
+
+    return "🎉" in summary or "feest" in summary.lower()
 
 
 def is_yearly_recurring(event):
@@ -288,7 +299,8 @@ def update_event_summary(event, source):
 
     Extra: voor jaarlijkse afspraken uit de Klender-familieagenda
     wordt het verjaardagsicoon vóór het onderwerp gezet (voor de
-    persoons-prefix).
+    persoons-prefix). Als in het onderwerp 'verjaardag' of 'feest'
+    voorkomt, wordt er een feest-icoon vóór het onderwerp geplaatst.
     """
 
     mode = source["mode"]
@@ -305,10 +317,11 @@ def update_event_summary(event, source):
         and not has_birthday_icon(original_summary)
     )
 
-    # Als het onderwerp al een persoons-prefix heeft, willen we het
-    # icoon vóór die prefix zetten. Als geen prefix aanwezig is, voegen
-    # we eerst de prefix (indien van toepassing) en plaatsen het icoon
-    # daarna vóór het volledige onderwerp.
+    # Bepaal of we een feesticoon moeten toevoegen (als 'verjaardag' of 'feest' in onderwerp)
+    add_party = (
+        ("verjaardag" in original_summary.lower() or "feest" in original_summary.lower())
+        and not has_party_icon(original_summary)
+    )
 
     # Zoek de prefix die we normaal zouden toevoegen
     prefix_to_add = ""
@@ -322,17 +335,28 @@ def update_event_summary(event, source):
                 f"Onbekende verwerkingsmodus voor '{source['name']}': {mode}"
             )
 
-    # Bouw nieuw onderwerp
+    # Bouw het onderwerp: volgorde van iconen/prefixes is:
+    # PARTY_ICON (indien van toepassing) + BIRTHDAY_ICON (indien van toepassing) + prefix + originele onderwerp
+    new_summary = original_summary
+
     if already_has_prefix(original_summary):
-        # Plaats icoon vóór het bestaande onderwerp (dat al een prefix bevat)
-        if add_birthday:
-            event["SUMMARY"] = f"{BIRTHDAY_ICON}{original_summary}"
-        # anders niets doen
-        return
-    else:
-        new_summary = f"{prefix_to_add}{original_summary}" if prefix_to_add else original_summary
+        # Als er al een prefix is, we voegen iconen vóór het bestaande onderwerp
         if add_birthday:
             new_summary = f"{BIRTHDAY_ICON}{new_summary}"
+        if add_party:
+            new_summary = f"{PARTY_ICON}{new_summary}"
+    else:
+        # Voeg prefix (indien aanwezig) vóór onderwerp
+        if prefix_to_add:
+            new_summary = f"{prefix_to_add}{new_summary}"
+        # Voeg iconen vóór alles
+        if add_birthday:
+            new_summary = f"{BIRTHDAY_ICON}{new_summary}"
+        if add_party:
+            new_summary = f"{PARTY_ICON}{new_summary}"
+
+    # Schrijf het nieuwe onderwerp indien gewijzigd
+    if new_summary != original_summary:
         event["SUMMARY"] = new_summary
 
 
