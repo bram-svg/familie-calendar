@@ -32,6 +32,9 @@ PERSON_PREFIXES = {
     "bram": "🟡 B - ",
 }
 
+# Icoon voor verjaardagen (voeg dit vóór het onderwerp)
+BIRTHDAY_ICON = "🎂 "
+
 
 # ============================================================
 # Bronnen
@@ -90,6 +93,12 @@ SOURCES = [
         "mode": "none",
         "prefix": None,
     },
+    {
+        "name": "Parro schoolagenda",
+        "url": os.environ.get("PARRO_ICS_URL", ""),
+        "mode": "none",
+        "prefix": None,
+    },
 ]
 
 
@@ -110,6 +119,7 @@ def validate_sources():
         print("\nControleer de GitHub Secrets:")
         print("  - KLENDER_ICS_URL")
         print("  - GOOGLE_ICS_URL")
+        print("  - PARRO_ICS_URL")
 
         sys.exit(1)
 
@@ -233,8 +243,53 @@ def already_has_prefix(summary):
     return any(summary.startswith(prefix) for prefix in known_prefixes)
 
 
+def has_birthday_icon(summary):
+    """Controleer of het verjaardagsicoon al in het onderwerp staat."""
+
+    if not summary:
+        return False
+
+    return "🎂" in summary or "verjaardag" in summary.lower()
+
+
+def is_yearly_recurring(event):
+    """Detecteer of een VEVENT jaarlijks terugkeert (FREQ=YEARLY in RRULE)."""
+
+    rrule = event.get("RRULE")
+
+    if not rrule:
+        return False
+
+    try:
+        # icalendar's RRULE kan als vRecur of dict-achtig object terugkomen
+        if hasattr(rrule, "items"):
+            freq = rrule.get("FREQ") or rrule.get("freq")
+            if freq:
+                if isinstance(freq, (list, tuple)):
+                    freq_val = str(freq[0]).lower()
+                else:
+                    freq_val = str(freq).lower()
+
+                if "year" in freq_val:
+                    return True
+
+        # fallback: zoek in de tekstrepresentatie
+        txt = str(rrule).lower()
+        if "freq=yearly" in txt or "freq=year" in txt:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def update_event_summary(event, source):
-    """Pas het onderwerp aan volgens de configuratie van de bron."""
+    """Pas het onderwerp aan volgens de configuratie van de bron.
+
+    Extra: voor jaarlijkse afspraken uit de Klender-familieagenda
+    wordt het verjaardagsicoon vóór het onderwerp gezet (voor de
+    persoons-prefix).
+    """
 
     mode = source["mode"]
 
@@ -243,22 +298,42 @@ def update_event_summary(event, source):
 
     original_summary = get_summary(event)
 
+    # Bepaal of we een verjaardagsicoon moeten toevoegen
+    add_birthday = (
+        source.get("name") == "Klender familieagenda"
+        and is_yearly_recurring(event)
+        and not has_birthday_icon(original_summary)
+    )
+
+    # Als het onderwerp al een persoons-prefix heeft, willen we het
+    # icoon vóór die prefix zetten. Als geen prefix aanwezig is, voegen
+    # we eerst de prefix (indien van toepassing) en plaatsen het icoon
+    # daarna vóór het volledige onderwerp.
+
+    # Zoek de prefix die we normaal zouden toevoegen
+    prefix_to_add = ""
+    if not already_has_prefix(original_summary):
+        if mode == "fixed":
+            prefix_to_add = source["prefix"] or ""
+        elif mode == "attendee":
+            prefix_to_add = determine_attendee_prefix(event)
+        else:
+            raise ValueError(
+                f"Onbekende verwerkingsmodus voor '{source['name']}': {mode}"
+            )
+
+    # Bouw nieuw onderwerp
     if already_has_prefix(original_summary):
+        # Plaats icoon vóór het bestaande onderwerp (dat al een prefix bevat)
+        if add_birthday:
+            event["SUMMARY"] = f"{BIRTHDAY_ICON}{original_summary}"
+        # anders niets doen
         return
-
-    if mode == "fixed":
-        prefix = source["prefix"]
-
-    elif mode == "attendee":
-        prefix = determine_attendee_prefix(event)
-
     else:
-        raise ValueError(
-            f"Onbekende verwerkingsmodus voor '{source['name']}': {mode}"
-        )
-
-    if prefix:
-        event["SUMMARY"] = prefix + original_summary
+        new_summary = f"{prefix_to_add}{original_summary}" if prefix_to_add else original_summary
+        if add_birthday:
+            new_summary = f"{BIRTHDAY_ICON}{new_summary}"
+        event["SUMMARY"] = new_summary
 
 
 def component_signature(component):
