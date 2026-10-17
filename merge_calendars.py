@@ -3,6 +3,7 @@ import sys
 import hashlib
 from pathlib import Path
 import re
+import unicodedata
 
 import requests
 from icalendar import Calendar, Event
@@ -259,12 +260,13 @@ def has_birthday_icon(summary):
 
 
 def has_party_icon(summary):
-    """Controleer of het feesticoon of het woord 'feest' al in het onderwerp staat."""
+    """Controleer of het feesticoon al in het onderwerp staat."""
 
     if not summary:
         return False
 
-    return "🎉" in summary or "feest" in summary.lower()
+    # Alleen controleren op het emoji-teken — niet op het woord 'feest'.
+    return "🎉" in summary
 
 
 def has_medical_icon(summary):
@@ -362,7 +364,8 @@ def update_event_summary(event, source):
         return
 
     original_summary = get_summary(event)
-    lower_summary = original_summary.lower()
+    # normalize to catch unicode variants and unify spacing
+    lower_summary = unicodedata.normalize("NFKC", original_summary).lower()
     source_name = (source.get("name") or "").lower()
     source_url = (source.get("url") or "").lower()
 
@@ -386,8 +389,13 @@ def update_event_summary(event, source):
     ) and not has_hockey_icon(original_summary)
     hockey_prefix = HOCKEY_ICON if add_hockey else ""
 
-    # Ski-prefix voor alle onderwerpen met 'skiles', 'ski' of 'wintersport' in het onderwerp
-    add_ski = bool(re.search(r"\b(skiles|ski|wintersport|snowboard|langlaufen)\b", lower_summary)) and not has_ski_icon(original_summary)
+    # Ski-prefix: match diverse vormen zoals 'skiles', 'ski les', 'ski-les'
+    add_ski = bool(
+        re.search(
+            r"(?<!\w)(skiles|ski(?:[\s-]?les)?|wintersport|snowboard|langlaufen)(?!\w)",
+            lower_summary,
+        )
+    ) and not has_ski_icon(original_summary)
     ski_prefix = SKI_ICON if add_ski else ""
 
     # Vliegtuig-prefix voor onderwerpen met 'vlucht' (of 'vluchten')
