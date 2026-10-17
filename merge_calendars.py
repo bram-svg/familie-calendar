@@ -292,13 +292,13 @@ def has_hockey_icon(summary):
 
 
 def has_ski_icon(summary):
-    """Controleer of het ski-icoon of het woord 'ski'/'wintersport' al in het onderwerp staat."""
+    """Controleer of het ski-icoon al in het onderwerp staat."""
 
     if not summary:
         return False
 
-    lower = summary.lower()
-    return "⛷️" in summary or bool(re.search(r"\b(skiles|ski|wintersport|snowboard|langlaufen)\b", lower))
+    # Alleen controleren op het emoji-teken — niet op woorden zoals 'ski' of 'skiles'.
+    return "⛷️" in summary or "⛷" in summary
 
 
 def has_plane_icon(summary):
