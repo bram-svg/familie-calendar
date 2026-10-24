@@ -87,7 +87,7 @@ SOURCES = [
         "name": "Hockey Guus",
         "url": "https://bram-svg.github.io/hockey-calendar/team-G.ics",
         "mode": "fixed",
-        "prefix": "🔵 G - ",
+        "prefix": "🔵 G - 🟢 L -",
     },
     {
         "name": "Hockey Luuk",
