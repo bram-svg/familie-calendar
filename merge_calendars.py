@@ -48,6 +48,9 @@ HOCKEY_ICON = "🏑 "
 SKI_ICON = "⛷️ "
 # Vliegtuig icoon
 PLANE_ICON = "✈️ "
+# Piano- en gitaariconen
+PIANO_ICON = "🎹 "
+GUITAR_ICON = "🎸 "
 
 
 # ============================================================
@@ -310,6 +313,18 @@ def has_plane_icon(summary):
     return "✈️" in summary or "✈" in summary
 
 
+def has_piano_icon(summary):
+    """Controleer of het piano-icoon al in het onderwerp staat."""
+
+    return "🎹" in summary
+
+
+def has_guitar_icon(summary):
+    """Controleer of het gitaar-icoon al in het onderwerp staat."""
+
+    return "🎸" in summary
+
+
 def is_yearly_recurring(event):
     """Detecteer of een VEVENT jaarlijks terugkeert (FREQ=YEARLY in RRULE)."""
 
@@ -356,6 +371,7 @@ def update_event_summary(event, source):
     het ski-icoon vóór het onderwerp geplaatst.
     Voor vluchten/treinreizen met 'vlucht' in het onderwerp wordt het
     vliegtuig-icoon vóór het onderwerp geplaatst.
+    Voor piano- en gitaarafspraken worden respectievelijk 🎹 en 🎸 toegevoegd.
     """
 
     mode = source["mode"]
@@ -402,6 +418,17 @@ def update_event_summary(event, source):
     add_plane = bool(re.search(r"\b(vlucht|vluchten)\b", lower_summary)) and not has_plane_icon(original_summary)
     plane_prefix = PLANE_ICON if add_plane else ""
 
+    # Piano- en gitaarprefix voor muziekafspraken
+    add_piano = bool(
+        re.search(r"(?<!\w)piano(?:[\s-]?les)?(?!\w)", lower_summary)
+    ) and not has_piano_icon(original_summary)
+    piano_prefix = PIANO_ICON if add_piano else ""
+
+    add_guitar = bool(
+        re.search(r"(?<!\w)gitaar(?:[\s-]?les)?(?!\w)", lower_summary)
+    ) and not has_guitar_icon(original_summary)
+    guitar_prefix = GUITAR_ICON if add_guitar else ""
+
     # Bepaal of we een verjaardagsicoon moeten toevoegen
     add_birthday = (
         source.get("name") == "Klender familieagenda"
@@ -427,8 +454,7 @@ def update_event_summary(event, source):
                 f"Onbekende verwerkingsmodus voor '{source['name']}': {mode}"
             )
 
-    # Bouw het onderwerp: volgorde van iconen/prefixes is:
-    # MEDICAL_ICON + HOCKEY_ICON + SKI_ICON + PLANE_ICON + PARTY_ICON + BIRTHDAY_ICON + prefix + originele onderwerp
+    # Bouw het onderwerp: medische, sport-, reis- en muziekiconen komen vóór de prefix.
     new_summary = original_summary
 
     if already_has_prefix(original_summary):
@@ -441,6 +467,10 @@ def update_event_summary(event, source):
             new_summary = f"{ski_prefix}{new_summary}"
         if plane_prefix:
             new_summary = f"{plane_prefix}{new_summary}"
+        if piano_prefix:
+            new_summary = f"{piano_prefix}{new_summary}"
+        if guitar_prefix:
+            new_summary = f"{guitar_prefix}{new_summary}"
         if add_birthday:
             new_summary = f"{BIRTHDAY_ICON}{new_summary}"
         if add_party:
@@ -449,7 +479,7 @@ def update_event_summary(event, source):
         # Voeg prefix (indien aanwezig) vóór onderwerp
         if prefix_to_add:
             new_summary = f"{prefix_to_add}{new_summary}"
-        # Voeg iconen vóór alles (medisch, hockey, ski en vliegtuig eerst)
+        # Voeg iconen vóór alles
         if medical_prefix:
             new_summary = f"{medical_prefix}{new_summary}"
         if hockey_prefix:
@@ -458,6 +488,10 @@ def update_event_summary(event, source):
             new_summary = f"{ski_prefix}{new_summary}"
         if plane_prefix:
             new_summary = f"{plane_prefix}{new_summary}"
+        if piano_prefix:
+            new_summary = f"{piano_prefix}{new_summary}"
+        if guitar_prefix:
+            new_summary = f"{guitar_prefix}{new_summary}"
         if add_birthday:
             new_summary = f"{BIRTHDAY_ICON}{new_summary}"
         if add_party:
@@ -532,7 +566,7 @@ def build_output_calendar():
             if signature in added_components:
                 print(
                     f"  Dubbel onderdeel overgeslagen in "
-                    f"'{source['name']}': {signature}"
+                    f"'{source['name']}' : {signature}"
                 )
                 continue
 
